@@ -1,64 +1,67 @@
-from flask import Blueprint
-from processors.processor import resumen_totales
 import matplotlib.pyplot as plt
 import io
 import base64
+from flask import Blueprint
+from processors.processor import resumen_totales_customer, resumen_totales_vendor
 
-chart_blueprint = Blueprint("graphics", __name__)
+chart_blueprint = Blueprint("chart", __name__)
 
-@chart_blueprint.route("/graphics")
-def mostrar_grafica():
-    if not resumen_totales:
-        return "Aún no se ha procesado ningún archivo válido."
+def generar_grafico(resumen, titulo):
+    if not resumen:
+        return "", ""
 
-    # Datos originales
-    categorias = list(resumen_totales.keys())
-    valores = list(resumen_totales.values())
-
-    # Agregar categoría "Total"
+    categorias = list(resumen.keys())
+    valores = list(resumen.values())
     total_general = sum(valores)
     categorias.append("Total")
     valores.append(total_general)
 
-    # Calcular porcentajes
     porcentajes = {
         k: f"{(v / total_general * 100):.2f}%" if total_general != 0 else "0.00%"
-        for k, v in resumen_totales.items()
+        for k, v in resumen.items()
     }
 
-    # Generar gráfica
     plt.figure(figsize=(12, 6))
     bars = plt.bar(categorias, valores, color='skyblue')
-
-    # Quitar título superior
     plt.title("")  
     plt.xlabel("Categorías")
     plt.ylabel("Total ($)")
     plt.grid(axis='y')
 
-    # Etiquetas de valores en cada barra
     for bar in bars:
         yval = bar.get_height()
         label = "${:,.2f}".format(yval)
         plt.text(bar.get_x() + bar.get_width() / 2, yval, label, ha='center', va='bottom')
 
-    # Texto al pie de la gráfica
-    plt.figtext(0.5, -0.05, "TRANSACTION BY CUSTOMER", wrap=True, horizontalalignment='center', fontsize=14)
-
-    # Convertir la imagen a base64
+    plt.figtext(0.5, -0.05, titulo, wrap=True, horizontalalignment='center', fontsize=14)
     img = io.BytesIO()
     plt.tight_layout()
     plt.savefig(img, format='png', bbox_inches='tight')
     img.seek(0)
     plot_url = base64.b64encode(img.getvalue()).decode()
 
-    # Generar HTML de porcentajes al lado derecho
     porcentaje_html = "<ul>"
     for k, pct in porcentajes.items():
         porcentaje_html += f"<li><strong>{k}</strong>: {pct}</li>"
     porcentaje_html += "</ul>"
 
-    # HTML completo
+    return plot_url, porcentaje_html
+
+@chart_blueprint.route("/graphics")
+def mostrar_grafica():
+    html_contenido = ""
+
+    if resumen_totales_customer:
+        img_url, html_porcentajes = generar_grafico(resumen_totales_customer, "TRANSACTION BY CUSTOMER")
+        html_contenido += generar_html_grafico_estilizado(img_url, html_porcentajes, "")
+
+    if resumen_totales_vendor:
+        img_url, html_porcentajes = generar_grafico(resumen_totales_vendor, "TRANSACTION BY VENDORS")
+        html_contenido += generar_html_grafico_estilizado(img_url, html_porcentajes, "")
+
+    if not html_contenido:
+        return "Aún no se ha procesado ningún archivo válido."
+
     html = f"""
     <html>
     <head>
@@ -82,24 +85,21 @@ def mostrar_grafica():
                 display: flex;
                 align-items: flex-start;
                 justify-content: center;
-                gap: 0px;  /* no usamos gap para controlar la separación manualmente */
+                gap: 0px;
                 width: 100%;
                 max-width: 1300px;
-              
+                margin-bottom: 80px;
             }}
             .chart {{
-              flex-grow: 1;  /* toma todo el espacio disponible */
+              flex-grow: 1;
               display: flex;
               justify-content: center;
             }}
-
-              .chart img {{
+            .chart img {{
               width: 100%;
               max-width: 1100px;
               height: auto;
             }}
-
-            
             .porcentajes {{
                 background: #ffffff;
                 padding: 25px;
@@ -107,7 +107,7 @@ def mostrar_grafica():
                 box-shadow: 0 4px 8px rgba(0,0,0,0.1);
                 min-width: 200px;
                 border: 2px solid #e0e0e0;
-                margin-left: 50px;  /* separamos del gráfico para que no tape nada */
+                margin-left: 50px;
                 margin-top: 50px;
             }}
             ul {{
@@ -121,17 +121,24 @@ def mostrar_grafica():
         </style>
     </head>
     <body>
-        <h2>GRAPHICS BUSINESS</h2>
-        <div class="container">
-            <div class="chart">
-                <img src="data:image/png;base64,{plot_url}" alt="TRANSACTION BY CUSTOMER">
-            </div>
-            <div class="porcentajes">
-                <h3>Porcentajes</h3>
-                {porcentaje_html}
-            </div>
-        </div>
+        <h1>GRAPHICS BUSINESS</h1>
+        {html_contenido}
     </body>
     </html>
     """
     return html
+
+def generar_html_grafico_estilizado(img_url, html_porcentajes, titulo):
+    return f"""
+    <h2>{titulo}</h2>
+    <div class="container">
+        <div class="chart">
+            <img src="data:image/png;base64,{img_url}" alt="{titulo}">
+        </div>
+        <div class="porcentajes">
+            <h3>Porcentajes</h3>
+            {html_porcentajes}
+        </div>
+    </div>
+    """
+

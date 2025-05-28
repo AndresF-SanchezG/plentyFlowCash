@@ -1,5 +1,7 @@
 from flask import Blueprint, request, render_template
-from processors.processor import procesar_excel, procesar_otro_excel, resumen_totales
+from processors.processor import procesar_excel, procesar_otro_excel, procesar_vendors_excel, resumen_totales_customer, resumen_totales_vendor 
+
+
 import os
 
 upload_blueprint = Blueprint("upload", __name__)
@@ -24,6 +26,9 @@ def upload_file():
     try:
         if file.filename == "Transaction_List_by_Customer.xlsx":
             output_path = procesar_excel(uploaded_path)
+            return f"Archivo <strong>{file.filename}</strong> procesado exitosamente. Resultado: {output_path}"
+        elif file.filename == "Transaction_List_by_Vendors.xlsx":
+            output_path = procesar_vendors_excel(uploaded_path)
             return f"Archivo <strong>{file.filename}</strong> procesado exitosamente. Resultado: {output_path}"
         else:
             mensaje = procesar_otro_excel(uploaded_path)

@@ -1,7 +1,8 @@
 import pandas as pd
 import os
 
-resumen_totales = {}
+resumen_totales_customer = {}
+resumen_totales_vendor = {}
 
 def procesar_excel(file_path):
     df = pd.read_excel(file_path, header=None)
@@ -30,8 +31,8 @@ def procesar_excel(file_path):
     df_wire_final, total_wire = procesar_filtro(df_part2, ['WIRE ACCOUNT 3682', 'BUSINESS  3682'])
     df_zell_final, total_zell = procesar_filtro(df_part2, ['ZELL'])
 
-    resumen_totales.clear()
-    resumen_totales.update({
+    resumen_totales_customer.clear()
+    resumen_totales_customer.update({
             "Cash": total_cash,
             "Check": total_checking,
             "Payments": total_payments,
@@ -54,6 +55,61 @@ def procesar_excel(file_path):
 def procesar_otro_excel(file_path):
     return f"Se recibió el archivo {os.path.basename(file_path)}, pero no se aplicó el filtro especial."
 
+def procesar_vendors_excel(file_path):
+    df = pd.read_excel(file_path, header=None)
+
+    df.at[4, 0] = "Vendor"
+    df[0] = df[0].fillna(method='ffill')
+    df_part1 = df.iloc[:5]
+    df_part2 = df.iloc[5:]
+
+    # Excluir Accounts Payable (A/P)
+    df_filtrado = df_part2[df_part2[6] != "Accounts Payable (A/P)"].copy()
+
+    # Eliminar filas con categoría vacía o NaN
+    df_filtrado = df_filtrado[df_filtrado[6].notna()]
+
+    # Convertir monto a número y dejarlo negativo si es positivo
+    df_filtrado[7] = pd.to_numeric(df_filtrado[7].astype(str).str.replace(',', '.'), errors='coerce')
+    df_filtrado[7] = df_filtrado[7].where(df_filtrado[7] < 0, -df_filtrado[7])
+
+    # Crear nueva columna con categoría normalizada
+    def normalizar_categoria(valor):
+        valor = str(valor).lower().strip()
+        if valor in ["cash", "cash on hand", "money order"]:
+            return "Cash"
+        elif valor in ["check", "checking"]:
+            return "Check"
+        elif any(w in valor for w in ["wire", "3682", "wiretransfer", "business"]):
+            return "Wire"
+        elif "credit card" in valor:
+            return "Credit Card"
+        elif "zell" in valor:
+            return "Zell"
+        else:
+            return valor.title()  # mantiene el resto con formato capitalizado
+
+    df_filtrado['CategoriaNormalizada'] = df_filtrado[6].apply(normalizar_categoria)
+
+    # Agrupar por categoría normalizada
+    resumen = df_filtrado.groupby('CategoriaNormalizada')[7].sum().to_dict()
+
+    resumen_totales_vendor.clear()
+    resumen_totales_vendor.update(resumen)
+
+    downloads_path = os.path.join('/mnt/c/Users/Andres Sanchez/Downloads', "Transaction_List_by_Vendors_Filtrado.xlsx")
+
+    with pd.ExcelWriter(downloads_path, engine='openpyxl') as writer:
+        for tipo, total in resumen.items():
+            df_tipo = df_filtrado[df_filtrado['CategoriaNormalizada'] == tipo]
+            total_row = pd.Series([None]*df.shape[1])
+            total_row[0] = "Total"
+            total_row[7] = total
+            df_tipo = pd.concat([df_tipo, total_row.to_frame().T], ignore_index=True)
+            df_final = pd.concat([df_part1, df_tipo.drop(columns=['CategoriaNormalizada'])], ignore_index=True)
+            df_final.to_excel(writer, index=False, header=False, sheet_name=tipo[:31])  # límite de nombre en Excel
+
+    return downloads_path
 
 
     
