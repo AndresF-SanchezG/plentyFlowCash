@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
+import pandas as pd
 import io
 import base64
 from flask import Blueprint
-from processors.processor import resumen_totales_customer, resumen_totales_vendor
+from processors.processor import resumen_totales_customer, resumen_totales_vendor, resumen_totales_vendor_por_proveedor
 
 chart_blueprint = Blueprint("chart", __name__)
 
@@ -59,8 +60,21 @@ def mostrar_grafica():
         img_url, html_porcentajes = generar_grafico(resumen_totales_vendor, "TRANSACTION BY VENDORS")
         html_contenido += generar_html_grafico_estilizado(img_url, html_porcentajes, "")
 
+    if resumen_totales_vendor_por_proveedor:
+        html_tabla = generar_tabla_html_vendor_por_proveedor(resumen_totales_vendor_por_proveedor)
+        html_contenido += f"""
+            <h2>TRANSACTION BY VENDOR NAME</h2>
+            <div class="container" style="flex-direction: column; align-items: center;">
+                <div class="tabla-container">
+                    {html_tabla}
+                </div>
+            </div>
+        """
+    
+
     if not html_contenido:
         return "Aún no se ha procesado ningún archivo válido."
+    
 
     html = f"""
     <html>
@@ -89,6 +103,42 @@ def mostrar_grafica():
                 width: 100%;
                 max-width: 1300px;
                 margin-bottom: 80px;
+            }}
+            .tabla-vendors {{
+                border-collapse: collapse;
+                 width: 80%;
+                margin-top: 30px;
+                background: #fff;
+                border: 1px solid #ddd;
+                font-size: 16px;
+            }}
+
+            .tabla-vendors th, .tabla-vendors td {{
+                border: 1px solid #ddd;
+                padding: 12px;
+                text-align: center;
+                
+            }}
+
+            .tabla-vendors th {{
+                background-color: #f2f2f2;
+                font-weight: bold;
+                
+                
+            }}
+
+            .tabla-vendors tr:nth-child(even) {{
+                background-color: #f9f9f9;
+                
+                
+                
+            }}
+
+             .tabla-vendors tr:hover {{
+                background-color: #f1f1f1;
+                
+                
+                
             }}
             .chart {{
               flex-grow: 1;
@@ -141,4 +191,16 @@ def generar_html_grafico_estilizado(img_url, html_porcentajes, titulo):
         </div>
     </div>
     """
+
+def generar_tabla_html_vendor_por_proveedor(resumen_dict):
+    if not resumen_dict:
+        return ""
+
+    df = pd.DataFrame(list(resumen_dict.items()), columns=["Vendor", "Valor"])
+    df["Valor"] = df["Valor"].astype(float).abs()
+    total = df["Valor"].sum()
+    df["%"] = (df["Valor"] / total) * 100
+    df = df.sort_values(by="Valor", ascending=False)
+    
+    return df.to_html(index=False, float_format='{:,.2f}'.format, classes="tabla-vendors")
 
