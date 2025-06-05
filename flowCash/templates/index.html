@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -15,5 +16,14 @@
             </form>
         </div>
     </div>
-</body>
+    <script>
+        function toggleFilas(button) {
+            const contenedor = button.closest('.tabla-expandible');
+            const filas = contenedor.querySelectorAll('.fila-extra');
+            const ocultas = filas[0].style.display === 'none';
+        
+            filas.forEach(fila => fila.style.display = ocultas ? '' : 'none');
+            button.textContent = ocultas ? 'Mostrar menos' : 'Mostrar más';
+        }
+        </script>
 </html>

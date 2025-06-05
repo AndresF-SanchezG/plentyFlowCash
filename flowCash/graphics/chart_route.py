@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 import pandas as pd
+import uuid
 import io
 import base64
 from flask import Blueprint
-from processors.processor import resumen_totales_customer, resumen_totales_vendor, resumen_totales_vendor_por_proveedor
+from processors.processor import resumen_totales_customer, resumen_totales_customer_por_customer, resumen_totales_vendor, resumen_totales_vendor_por_proveedor 
 
 chart_blueprint = Blueprint("chart", __name__)
 
@@ -12,13 +13,14 @@ def generar_grafico(resumen, titulo):
         return "", ""
 
     categorias = list(resumen.keys())
-    valores = list(resumen.values())
+    valores_originales = list(resumen.values())
+    valores = [abs(v) for v in valores_originales]  # Convertir a valores absolutos
     total_general = sum(valores)
     categorias.append("Total")
     valores.append(total_general)
 
     porcentajes = {
-        k: f"{(v / total_general * 100):.2f}%" if total_general != 0 else "0.00%"
+        k: f"{(abs(v) / total_general * 100):.2f}%" if total_general != 0 else "0.00%"
         for k, v in resumen.items()
     }
 
@@ -56,19 +58,26 @@ def mostrar_grafica():
         img_url, html_porcentajes = generar_grafico(resumen_totales_customer, "TRANSACTION BY CUSTOMER")
         html_contenido += generar_html_grafico_estilizado(img_url, html_porcentajes, "")
 
+    if resumen_totales_customer_por_customer:
+        html_tabla = generar_tabla_html_vendor_por_proveedor(resumen_totales_customer_por_customer, "tabla_customer")
+        html_contenido += f"""
+        <h2>TRANSACTION BY CUSTOMER NAME</h2>
+        <div class="container" style="flex-direction: column; align-items: center;">
+            {html_tabla}
+        </div>
+        """
+
     if resumen_totales_vendor:
         img_url, html_porcentajes = generar_grafico(resumen_totales_vendor, "TRANSACTION BY VENDORS")
         html_contenido += generar_html_grafico_estilizado(img_url, html_porcentajes, "")
 
     if resumen_totales_vendor_por_proveedor:
-        html_tabla = generar_tabla_html_vendor_por_proveedor(resumen_totales_vendor_por_proveedor)
+        html_tabla = generar_tabla_html_vendor_por_proveedor(resumen_totales_vendor_por_proveedor, "tabla_vendor")
         html_contenido += f"""
-            <h2>TRANSACTION BY VENDOR NAME</h2>
-            <div class="container" style="flex-direction: column; align-items: center;">
-                <div class="tabla-container">
-                    {html_tabla}
-                </div>
-            </div>
+        <h2>TRANSACTION BY VENDOR NAME</h2>
+        <div class="container" style="flex-direction: column; align-items: center;">
+            {html_tabla}
+        </div>
         """
     
 
@@ -173,6 +182,7 @@ def mostrar_grafica():
     <body>
         <h1>GRAPHICS BUSINESS</h1>
         {html_contenido}
+    
     </body>
     </html>
     """
@@ -192,7 +202,7 @@ def generar_html_grafico_estilizado(img_url, html_porcentajes, titulo):
     </div>
     """
 
-def generar_tabla_html_vendor_por_proveedor(resumen_dict):
+def generar_tabla_html_vendor_por_proveedor(resumen_dict, tabla_id):
     if not resumen_dict:
         return ""
 
@@ -200,7 +210,29 @@ def generar_tabla_html_vendor_por_proveedor(resumen_dict):
     df["Valor"] = df["Valor"].astype(float).abs()
     total = df["Valor"].sum()
     df["%"] = (df["Valor"] / total) * 100
-    df = df.sort_values(by="Valor", ascending=False)
-    
-    return df.to_html(index=False, float_format='{:,.2f}'.format, classes="tabla-vendors")
+    df = df.sort_values(by="Valor", ascending=False).reset_index(drop=True)
+
+    tabla_html = f"""
+    <div class="tabla-expandible" id="{tabla_id}">
+        <table class="tabla-vendors">
+            <thead>
+                <tr><th>Vendor</th><th>Valor</th><th>%</th></tr>
+            </thead>
+            <tbody>
+    """
+
+    for i, row in df.iterrows():
+        clase = "" if i < 10 else ' class="fila-extra" style="display: none;"'
+        tabla_html += f"<tr{clase}><td>{row['Vendor']}</td><td>{row['Valor']:,.2f}</td><td>{row['%']:.2f}%</td></tr>"
+
+    tabla_html += """
+            </tbody>
+        </table>
+        <div style="text-align: center; margin-top: 10px;">
+            <button class="toggle-btn" onclick="toggleFilas(this)">Mostrar más</button>
+        </div>
+    </div>
+    """
+
+    return tabla_html
 
